@@ -7,6 +7,7 @@ Benchmarks a model on all available GPUs in parallel and displays FPS for each d
 import argparse
 import subprocess
 import re
+import os
 import openvino as ov
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Optional
@@ -26,6 +27,21 @@ def get_available_gpus() -> List[str]:
     gpu_devices = [device for device in available_devices if device.startswith('GPU')]
     
     return gpu_devices
+
+
+def is_sriov_enabled() -> bool:
+    """
+    Check if SR-IOV is enabled by reading sriov_numvfs.
+    
+    Returns:
+        True if SR-IOV is enabled (numvfs > 0), False otherwise
+    """
+    try:
+        with open('/sys/class/drm/card1/device/sriov_numvfs', 'r') as f:
+            numvfs = int(f.read().strip())
+            return numvfs > 0
+    except (FileNotFoundError, ValueError, PermissionError):
+        return False
 
 
 def parse_fps_from_output(output: str) -> Optional[float]:
@@ -95,18 +111,75 @@ def benchmark_gpu(model_path: str, device: str, duration: int = 30) -> Tuple[str
         return device, None, f"Error: {str(e)}"
 
 
-def run_parallel_benchmarks(model_path: str, gpu_devices: List[str], duration: int = 30) -> None:
+def run_benchmarks(model_path: str, gpu_devices: List[str], duration: int = 30) -> None:
     """
-    Run benchmarks on all GPUs in parallel.
+    Run benchmarks on GPUs with SR-IOV awareness.
+    If SR-IOV is enabled, run GPU.0 first, then GPU.1+ in parallel.
+    Otherwise, run all GPUs in parallel.
     
     Args:
         model_path: Path to the model XML file
         gpu_devices: List of GPU device names
         duration: Benchmark duration in seconds
     """
-    print(f"\n[ INFO ] Starting parallel benchmarks on {len(gpu_devices)} GPU(s)")
-    print(f"[ INFO ] Model: {model_path}")
-    print(f"[ INFO ] Duration: {duration} seconds per GPU\n")
+    sriov_enabled = is_sriov_enabled()
+    all_results = {}
+    
+    if sriov_enabled and len(gpu_devices) > 1:
+        print(f"\n[ INFO ] SR-IOV detected - running GPU.0 first, then GPU.1+ in parallel")
+        print(f"[ INFO ] Model: {model_path}")
+        print(f"[ INFO ] Duration: {duration} seconds per GPU\n")
+        
+        # Run GPU.0 first
+        main_gpu = 'GPU.0'
+        if main_gpu in gpu_devices:
+            print(f"[ INFO ] Running benchmark on {main_gpu} (main GPU)...")
+            device, fps, error = benchmark_gpu(model_path, main_gpu, duration)
+            all_results[device] = (fps, error)
+            
+            if fps is not None:
+                print(f"[ COMPLETED ] {device}: {fps:.2f} FPS")
+            else:
+                print(f"[ FAILED ] {device}: {error}")
+        
+        # Run remaining GPUs in parallel
+        remaining_gpus = [gpu for gpu in gpu_devices if gpu != 'GPU.0']
+        if remaining_gpus:
+            print(f"\n[ INFO ] Running remaining {len(remaining_gpus)} GPU(s) in parallel...")
+            remaining_results = run_parallel_gpu_benchmarks(model_path, remaining_gpus, duration, show_summary=False)
+            all_results.update(remaining_results)
+        
+        # Print final summary for all GPUs
+        print_summary(model_path, all_results)
+    else:
+        # Standard parallel execution
+        all_results = run_parallel_gpu_benchmarks(model_path, gpu_devices, duration)
+
+
+def run_parallel_gpu_benchmarks(model_path: str, gpu_devices: List[str], duration: int = 30, show_summary: bool = True) -> dict:
+    """
+    Run benchmarks on specified GPUs in parallel.
+    
+    Args:
+        model_path: Path to the model XML file
+        gpu_devices: List of GPU device names
+        duration: Benchmark duration in seconds
+        show_summary: Whether to print summary at the end
+        
+    Returns:
+        Dictionary mapping device names to (fps, error) tuples
+    """
+    if not gpu_devices:
+        return {}
+        
+    if len(gpu_devices) == 1 and show_summary:
+        print(f"\n[ INFO ] Running benchmark on {gpu_devices[0]}")
+    elif show_summary:
+        print(f"\n[ INFO ] Starting parallel benchmarks on {len(gpu_devices)} GPU(s)")
+    
+    if show_summary:
+        print(f"[ INFO ] Model: {model_path}")
+        print(f"[ INFO ] Duration: {duration} seconds per GPU\n")
     
     # Run benchmarks in parallel using ThreadPoolExecutor
     results = {}
@@ -128,6 +201,21 @@ def run_parallel_benchmarks(model_path: str, gpu_devices: List[str], duration: i
             else:
                 print(f"[ FAILED ] {device}: {error}")
     
+    # Print summary for this batch
+    if show_summary:
+        print_summary(model_path, results)
+    
+    return results
+
+
+def print_summary(model_path: str, results: dict) -> None:
+    """
+    Print benchmark results summary.
+    
+    Args:
+        model_path: Path to the model XML file
+        results: Dictionary mapping device names to (fps, error) tuples
+    """
     # ANSI color codes
     GREEN = '\033[92m'
     RED = '\033[91m'
@@ -206,8 +294,8 @@ Examples:
     for device in gpu_devices:
         print(f"  - {device}")
     
-    # Run parallel benchmarks
-    run_parallel_benchmarks(args.model, gpu_devices, args.duration)
+    # Run benchmarks with SR-IOV awareness
+    run_benchmarks(args.model, gpu_devices, args.duration)
     
     return 0
 

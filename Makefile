@@ -10,7 +10,7 @@ CURRENT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 DOCKER_IMAGE_NAME=vf_container_image
 export DOCKER_BUILDKIT=1
 
-NUM_VFS ?= 4
+NUM_VFS ?= 2 
 VF_NUM ?= 1
 
 MODEL ?= /opt/models/yolo11s/FP16/yolo11s.xml
