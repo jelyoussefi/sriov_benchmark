@@ -50,16 +50,15 @@ default: test
 build:
 	@$(call msg, Building Docker image ${DOCKER_IMAGE_NAME} ...)
 	@docker build ${DOCKER_BUILD_PARAMS}
-
-i915:
-	@$(call msg, Configuring VFs ...)
-	@sudo modprobe i915 max_vfs=31
 	
 vf:
 	@$(call msg, Configuring VFs ...)
 	@sudo bash -c  ' \
- 		echo ${NUM_VFS} | tee -a /sys/class/drm/card1/device/sriov_numvfs'
-
+ 		echo ${NUM_VFS} | tee -a /sys/class/drm/card1/device/sriov_numvfs && \
+ 		modprobe vfio-pci && \
+ 		echo '8086 b0b0' | tee -a /sys/bus/pci/drivers/vfio-pci/new_id && \
+  		echo 4096 | tee /proc/sys/vm/nr_hugepages \
+  	
 ai_benchmark: 
 	@$(call msg, Running the AI Benchmark ...)
 	@docker run ${DOCKER_RUN_PARAMS} \
