@@ -24,7 +24,23 @@ DOCKER_RUN_PARAMS= \
 	-w /workspace \
 	 ${DOCKER_IMAGE_NAME}
 
+DOCKER_RUN_PARAMS= \
+	-it --rm -a stdout -a stderr  \
+	--privileged  \
+	-v ${CURRENT_DIR}:/workspace \
+	-e HTTP_PROXY=$(HTTP_PROXY) \
+	-e HTTPS_PROXY=$(HTTPS_PROXY) \
+	-e NO_PROXY=$(NO_PROXY) \
+	${DOCKER_IMAGE_NAME}
 
+DOCKER_BUILD_PARAMS := \
+	--rm \
+	--network=host \
+	--build-arg http_proxy=$(HTTP_PROXY) \
+	--build-arg https_proxy=$(HTTPS_PROXY) \
+	--build-arg no_proxy=$(NO_PROXY) \
+	-t $(DOCKER_IMAGE_NAME) . 
+	
 #----------------------------------------------------------------------------------------------------------------------
 # Targets
 #----------------------------------------------------------------------------------------------------------------------
@@ -33,7 +49,7 @@ default: test
 
 build:
 	@$(call msg, Building Docker image ${DOCKER_IMAGE_NAME} ...)
-	@docker build . -t ${DOCKER_IMAGE_NAME} 
+	@docker build ${DOCKER_BUILD_PARAMS}
 
 i915:
 	@$(call msg, Configuring VFs ...)
@@ -42,11 +58,7 @@ i915:
 vf:
 	@$(call msg, Configuring VFs ...)
 	@sudo bash -c  ' \
- 		echo ${NUM_VFS} | tee -a /sys/class/drm/card1/device/sriov_numvfs && \
- 		modprobe vfio-pci && \
- 		echo '8086 4680' | tee -a /sys/bus/pci/drivers/vfio-pci/new_id && \
-  		echo 4096 | tee /proc/sys/vm/nr_hugepages \
-  		'
+ 		echo ${NUM_VFS} | tee -a /sys/class/drm/card1/device/sriov_numvfs'
 
 ai_benchmark: 
 	@$(call msg, Running the AI Benchmark ...)
