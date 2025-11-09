@@ -42,6 +42,8 @@ COPY ./utils/prepare_models.sh /tmp/
 WORKDIR /opt/models/
 RUN /tmp/prepare_models.sh
 RUN rm -f /tmp/prepare_models.sh
+RUN omz_downloader --name person-detection-0303
+RUN mv intel/* .
 #--------------------------------------------------------------------------------------------------------------------------
 
 WORKDIR /workspace

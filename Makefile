@@ -13,7 +13,7 @@ export DOCKER_BUILDKIT=1
 NUM_VFS ?= 2 
 VF_NUM ?= 1
 
-MODEL ?= /opt/models/yolo11s/FP16/yolo11s.xml
+MODEL ?= /opt/models/person-detection-0303/FP16/person-detection-0303.xml
 DURATION ?= 10
 
 DOCKER_RUN_PARAMS= \
@@ -58,6 +58,7 @@ vf:
  		modprobe vfio-pci && \
  		echo '8086 b0b0' | tee -a /sys/bus/pci/drivers/vfio-pci/new_id && \
   		echo 4096 | tee /proc/sys/vm/nr_hugepages \
+		'
   	
 ai_benchmark: 
 	@$(call msg, Running the AI Benchmark ...)

@@ -238,11 +238,6 @@ def print_summary(model_path: str, results: dict) -> None:
         for device, fps in successful_results:
             print(f"{GREEN}\t {device}: {fps:.2f} FPS{RESET}")
         
-        # Calculate total throughput
-        if len(successful_results) > 1:
-            total_fps = sum(fps for _, fps in successful_results)
-            print(f"{GREEN}\t Total: {total_fps:.2f} FPS{RESET}")
-    
     if failed_results:
         print(f"\n{RED}[ FAILED ] Devices:{RESET}")
         for device, error in failed_results:
